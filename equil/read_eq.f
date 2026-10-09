@@ -814,14 +814,19 @@ c     unformatted records, real*8, axis first, theta index fastest:
 c       mx,my (integer*4: number of surfaces, number of angles)
 c       psi(mx) [Wb/rad], f(mx) = R*B_t [T m], p(mx) [Pa], q(mx)
 c       r(my,mx), z(my,mx) [m], periodic point duplicated
-c       optional: f*df/dpsi(mx), dp/dpsi(mx) (see profile_source)
+c       optional, each only if present, in this order:
+c       f*df/dpsi(mx), dp/dpsi(mx) (see profile_source);
+c       psi_axis, psi_lcfs (2 reals): unpadded plasma bounds, which
+c       normalize psi; the last surface may lie inside the lcfs and
+c       caps psihigh. Optional records are told apart by length (mx, 2).
 c-----------------------------------------------------------------------
 c-----------------------------------------------------------------------
 c     declarations.
 c-----------------------------------------------------------------------
       SUBROUTINE read_eq_ldp_i
 
-      INTEGER :: mx,my,ios1,ios2
+      INTEGER :: mx,my,ios1,ios2,ios3
+      REAL(r8), DIMENSION(2) :: psib
       REAL(r8), DIMENSION(:), POINTER :: psi,f,p,q,ffp,pp
       REAL(r8), DIMENSION(:,:), POINTER :: r,z
 c-----------------------------------------------------------------------
@@ -838,7 +843,7 @@ c-----------------------------------------------------------------------
       ALLOCATE(psi(0:mx),f(0:mx),p(0:mx),q(0:mx),
      $     r(0:my,0:mx),z(0:my,0:mx),ffp(0:mx),pp(0:mx))
 c-----------------------------------------------------------------------
-c     read binary data; f*df/dpsi and dp/dpsi records are optional.
+c     read binary data; a short record 7 is the psi bounds record.
 c-----------------------------------------------------------------------
       READ(in_unit)psi
       READ(in_unit)f
@@ -846,15 +851,33 @@ c-----------------------------------------------------------------------
       READ(in_unit)q
       READ(in_unit)r
       READ(in_unit)z
+      ios2=1
+      ios3=1
       READ(in_unit,IOSTAT=ios1)ffp
-      READ(in_unit,IOSTAT=ios2)pp
+      IF(ios1 == 0)READ(in_unit,IOSTAT=ios2)pp
+      IF(ios1 > 0)BACKSPACE(in_unit)
+      IF(ios1 >= 0)READ(in_unit,IOSTAT=ios3)psib
       CALL bin_close(in_unit)
 c-----------------------------------------------------------------------
 c     copy and revise 1D arrays.
 c-----------------------------------------------------------------------
-      psio=psi(mx)-psi(0)
       CALL spline_alloc(sq_in,mx,4)
-      sq_in%xs=(psi-psi(0))/psio
+      IF(ios3 == 0)THEN
+         psio=psib(2)-psib(1)
+         sq_in%xs=(psi-psib(1))/psio
+         IF(.NOT.(sq_in%xs(mx) > 0 .AND. sq_in%xs(mx) <= 1))
+     $        CALL program_stop("ldp_i psi bounds disagree with psi")
+         IF(verbose)WRITE(*,'(1x,a,1p,2es14.6)')
+     $        "ldp_i psi bounds: psi_axis, psi_lcfs =",psib
+         IF(psihigh > sq_in%xs(mx))THEN
+            WRITE(*,'(1x,2(a,es12.5))')"Note: psihigh =",psihigh,
+     $           " clamped to the last i-file surface",sq_in%xs(mx)
+            psihigh=sq_in%xs(mx)
+         ENDIF
+      ELSE
+         psio=psi(mx)-psi(0)
+         sq_in%xs=(psi-psi(0))/psio
+      ENDIF
       sq_in%fs(:,1)=ABS(f)
       sq_in%fs(:,2)=p*mu0
       sq_in%fs(:,3)=q
