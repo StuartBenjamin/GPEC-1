@@ -802,14 +802,20 @@ c-----------------------------------------------------------------------
 c-----------------------------------------------------------------------
 c     subprogram 12. read_eq_ldp_i.
 c     reads data from L. Don Pearlstein's inverse equilibrium code.
+c     optional trailing records, each only if present, in this order:
+c     f*df/dpsi(mx), dp/dpsi(mx) (skipped here);
+c     psi_axis, psi_lcfs (2 reals): unpadded plasma bounds, which
+c     normalize psi; the last surface may lie inside the lcfs and
+c     caps psihigh. Optional records are told apart by length.
 c-----------------------------------------------------------------------
 c-----------------------------------------------------------------------
 c     declarations.
 c-----------------------------------------------------------------------
       SUBROUTINE read_eq_ldp_i
 
-      INTEGER :: mx,my
-      REAL(r8), DIMENSION(:), POINTER :: psi,f,p,q
+      INTEGER :: mx,my,ios1,ios2
+      REAL(r8), DIMENSION(2) :: psib
+      REAL(r8), DIMENSION(:), POINTER :: psi,f,p,q,buf
       REAL(r8), DIMENSION(:,:), POINTER :: r,z
 c-----------------------------------------------------------------------
 c     open data file, read scalar data.
@@ -823,9 +829,9 @@ c-----------------------------------------------------------------------
       my=my-1
       mx=mx-1
       ALLOCATE(psi(0:mx),f(0:mx),p(0:mx),q(0:mx),
-     $     r(0:my,0:mx),z(0:my,0:mx))
+     $     r(0:my,0:mx),z(0:my,0:mx),buf(0:mx))
 c-----------------------------------------------------------------------
-c     read binary data.
+c     read binary data; a short record 7 is the psi bounds record.
 c-----------------------------------------------------------------------
       READ(in_unit)psi
       READ(in_unit)f
@@ -833,13 +839,35 @@ c-----------------------------------------------------------------------
       READ(in_unit)q
       READ(in_unit)r
       READ(in_unit)z
+      ios1=1
+      READ(in_unit,IOSTAT=ios2)buf
+      IF(ios2 == 0)READ(in_unit,IOSTAT=ios2)buf
+      IF(ios2 == 0)READ(in_unit,IOSTAT=ios1)psib
+      IF(ios2 > 0)THEN
+         BACKSPACE(in_unit)
+         READ(in_unit,IOSTAT=ios1)psib
+      ENDIF
       CALL bin_close(in_unit)
 c-----------------------------------------------------------------------
 c     copy and revise 1D arrays.
 c-----------------------------------------------------------------------
-      psio=psi(mx)-psi(0)
       CALL spline_alloc(sq_in,mx,4)
-      sq_in%xs=(psi-psi(0))/psio
+      IF(ios1 == 0)THEN
+         psio=psib(2)-psib(1)
+         sq_in%xs=(psi-psib(1))/psio
+         IF(.NOT.(sq_in%xs(mx) > 0 .AND. sq_in%xs(mx) <= 1))
+     $        CALL program_stop("ldp_i psi bounds disagree with psi")
+         IF(verbose)WRITE(*,'(1x,a,1p,2es14.6)')
+     $        "ldp_i psi bounds: psi_axis, psi_lcfs =",psib
+         IF(psihigh > sq_in%xs(mx))THEN
+            WRITE(*,'(1x,2(a,es12.5))')"Note: psihigh =",psihigh,
+     $           " clamped to the last i-file surface",sq_in%xs(mx)
+            psihigh=sq_in%xs(mx)
+         ENDIF
+      ELSE
+         psio=psi(mx)-psi(0)
+         sq_in%xs=(psi-psi(0))/psio
+      ENDIF
       sq_in%fs(:,1)=f
       sq_in%fs(:,2)=p*mu0
       sq_in%fs(:,3)=q
@@ -855,7 +883,7 @@ c-----------------------------------------------------------------------
 c-----------------------------------------------------------------------
 c     process inverse equilibrium and deallocate local arrays.
 c-----------------------------------------------------------------------
-      DEALLOCATE(psi,f,p,q,r,z)
+      DEALLOCATE(psi,f,p,q,r,z,buf)
       CALL inverse_run
 c-----------------------------------------------------------------------
 c     terminate.
