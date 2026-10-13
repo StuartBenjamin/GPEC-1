@@ -3,11 +3,12 @@ FC ?= gfortran
 GPEC = ../..
 LIBS ?= -L$(LAPACKHOME)/lib -llapack -lblas
 
-test_spline_hermite: test_spline_hermite.f90 $(GPEC)/deps/lib/libequil.a
+test_spline_%: test_spline_%.f90 $(GPEC)/deps/lib/libequil.a
 	$(FC) $(FFLAGS) -I$(GPEC)/equil -o $@ $< $(GPEC)/deps/lib/libequil.a $(LIBS)
 
-run: test_spline_hermite
+run: test_spline_hermite test_spline_pchip
 	./test_spline_hermite
+	./test_spline_pchip
 
 clean:
-	rm -f test_spline_hermite *.o *.mod
+	rm -f test_spline_hermite test_spline_pchip *.o *.mod
