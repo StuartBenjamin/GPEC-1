@@ -347,6 +347,7 @@ c-----------------------------------------------------------------------
       INTEGER :: ipert0,ipert,k,iside
       REAL(r8) :: psifac,di,di0,q,q1,rho,sig
       REAL(r8), PARAMETER :: half=.5_r8
+      COMPLEX(r8) :: tr,alpha
       COMPLEX(r8), DIMENSION(:,:,:,:), POINTER :: vmat,mmat
       COMPLEX(r8), DIMENSION(2,2) :: m0mat
       INTEGER, DIMENSION(:), POINTER :: r1,r2,n1,n2
@@ -395,7 +396,7 @@ c-----------------------------------------------------------------------
       di=m0mat(1,1)*m0mat(2,2)-m0mat(2,1)*m0mat(1,2)
       WRITE(*, '(1x,i5,1x,es11.3)') ising, di
       singp%di=di
-      singp%alpha=SQRT(-CMPLX(singp%di))
+      singp%alpha=SQRT(-CMPLX(singp%di,KIND=r8))
 c-----------------------------------------------------------------------
 c     reset order and compute higher-order terms.
 c-----------------------------------------------------------------------
@@ -403,12 +404,20 @@ c-----------------------------------------------------------------------
       DEALLOCATE(singp%mmatl,singp%mmatr)
       CALL sing_mmat(ising,r1,r2,n1,n2)
 c-----------------------------------------------------------------------
-c     compute powers.
+c     compute powers, the eigenvalues tr/2 -+ alpha of m0mat.
+c     they equal -+ singp%alpha only for a traceless block.
 c-----------------------------------------------------------------------
       ALLOCATE(singp%power(2*mpert))
       singp%power=0
-      singp%power(ipert0)=-singp%alpha
-      singp%power(ipert0+mpert)=singp%alpha
+      tr=m0mat(1,1)+m0mat(2,2)
+      IF(tr == 0)THEN
+         singp%power(ipert0)=-singp%alpha
+         singp%power(ipert0+mpert)=singp%alpha
+      ELSE
+         alpha=SQRT(tr*tr/4-m0mat(1,1)*m0mat(2,2)+m0mat(2,1)*m0mat(1,2))
+         singp%power(ipert0)=tr/2-alpha
+         singp%power(ipert0+mpert)=tr/2+alpha
+      ENDIF
 c-----------------------------------------------------------------------
 c     allocate vmatl and vmatr at singular surface.
 c-----------------------------------------------------------------------
@@ -444,9 +453,9 @@ c-----------------------------------------------------------------------
          vmat(ipert0,ipert0,1,0)=1
          vmat(ipert0,ipert0+mpert,1,0)=1
          vmat(ipert0,ipert0,2,0)
-     $        =-(m0mat(1,1)+sig*singp%alpha)/m0mat(1,2)
+     $        =-(m0mat(1,1)-sig*singp%power(ipert0))/m0mat(1,2)
          vmat(ipert0,ipert0+mpert,2,0)
-     $        =-(m0mat(1,1)-sig*singp%alpha)/m0mat(1,2)
+     $        =-(m0mat(1,1)-sig*singp%power(ipert0+mpert))/m0mat(1,2)
 c-----------------------------------------------------------------------
 c     compute higher-order solutions.
 c-----------------------------------------------------------------------
@@ -857,7 +866,6 @@ c-----------------------------------------------------------------------
       INTEGER :: iorder
       INTEGER, DIMENSION(:), POINTER :: r1,r2
       COMPLEX(r8) :: dpsi,sqrtfac
-      COMPLEX(r8) :: pfac
       COMPLEX(r8), DIMENSION(:,:,:,:), POINTER :: vmat
       TYPE(sing_type), POINTER :: singp
 c-----------------------------------------------------------------------
@@ -877,7 +885,6 @@ c-----------------------------------------------------------------------
 c     compute powers of distance from singular surface.
 c-----------------------------------------------------------------------
       sqrtfac=SQRT(dpsi)
-      pfac=dpsi**singp%alpha
 c-----------------------------------------------------------------------
 c     compute power series by Horner's method.
 c-----------------------------------------------------------------------
@@ -890,8 +897,8 @@ c     restore powers (unshear v->u).
 c-----------------------------------------------------------------------
       ua(r1,:,1)=ua(r1,:,1)/sqrtfac    !<---mult row by shear z^(-1/2)
       ua(r1,:,2)=ua(r1,:,2)*sqrtfac    !<---mult row by shear z^(+1/2)
-      ua(:,r2(1),:)=ua(:,r2(1),:)/pfac !<---mult column by z^alpha-
-      ua(:,r2(2),:)=ua(:,r2(2),:)*pfac !<---mult column by z^alpha+
+      ua(:,r2(1),:)=ua(:,r2(1),:)/dpsi**(-singp%power(r2(1)))
+      ua(:,r2(2),:)=ua(:,r2(2),:)*dpsi**singp%power(r2(2))
 c-----------------------------------------------------------------------
 c     terminate.
 c-----------------------------------------------------------------------
