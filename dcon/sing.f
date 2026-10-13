@@ -304,7 +304,7 @@ c-----------------------------------------------------------------------
       m0mat=TRANSPOSE(singp%mmat(r1(1),r2,:,0))
       di=m0mat(1,1)*m0mat(2,2)-m0mat(2,1)*m0mat(1,2)
       singp%di=di
-      singp%alpha=SQRT(-CMPLX(singp%di))
+      singp%alpha=SQRT(-CMPLX(singp%di,KIND=r8))
 c-----------------------------------------------------------------------
 c     Frobenius powers are the eigenvalues tr/2 -+ alpha of m0mat.
 c     they equal -+ singp%alpha only for a traceless block.

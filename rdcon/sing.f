@@ -299,7 +299,7 @@ c-----------------------------------------------------------------------
       WRITE(*,'(3x,a4,es10.3E2,a9,I4)') "di =",di,
      $     ", ising =",ising
       singp%di=di
-      singp%alpha=SQRT(-CMPLX(singp%di))
+      singp%alpha=SQRT(-CMPLX(singp%di,KIND=r8))
 c-----------------------------------------------------------------------
 c     reset order and compute higher-order terms.
 c-----------------------------------------------------------------------

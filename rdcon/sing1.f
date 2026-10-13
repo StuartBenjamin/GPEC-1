@@ -491,7 +491,7 @@ c-----------------------------------------------------------------------
       m0mat=TRANSPOSE(singp%mmat(r1(1),r2,:,0))
       di=m0mat(1,1)*m0mat(2,2)-m0mat(2,1)*m0mat(1,2)
       singp%di=di
-      singp%alpha=SQRT(-CMPLX(singp%di))
+      singp%alpha=SQRT(-CMPLX(singp%di,KIND=r8))
 c      singp%degen=.TRUE.
       singp%degen=ABS(di+0.25_r8) < degen_tol
 c$$$      WRITE(*,*)'SINGP%DEGEN=',singp%degen,'di+0.25=',di+0.25_r8
