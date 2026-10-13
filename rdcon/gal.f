@@ -1399,6 +1399,7 @@ c-----------------------------------------------------------------------
       SUBROUTINE gal_solve
 
       INTEGER :: info,isol,jsol,imap,ising,ix,msol_old
+      CHARACTER(128) :: message
       TYPE(gal_type) :: gal
 c-----------------------------------------------------------------------
 c     allocate and compute arrays.
@@ -1413,19 +1414,45 @@ c     solve global matrix.
 c-----------------------------------------------------------------------
       gal%sol=gal%rhs
       WRITE(*,*)"Grid generated with ",gal%ndim," DOF"
+c-----------------------------------------------------------------------
+c     Cholesky; if the matrix is not positive definite, warn and
+c     reassemble the full band from the element matrices for LU.
+c     The boundary rows and columns are already set in cell%mat.
+c-----------------------------------------------------------------------
+      IF (solver == "cholesky") THEN
+         WRITE(*,*)"Performing Galerkin matrix Cholesky factorization"
+         CALL zpbtrf('L',gal%ndim,gal%kl,gal%mat,gal%ldab,info)
+         IF (info /= 0) THEN
+            WRITE(*,'(a,i0,a)')" WARNING: zpbtrf info = ",info,
+     $           ": Galerkin matrix is not positive definite;"
+     $           //" switching to solver='LU'."
+            solver="LU"
+            gal%ldab=2*gal%kl+gal%ku+1
+            DEALLOCATE(gal%mat)
+            ALLOCATE(gal%mat(gal%ldab,gal%ndim))
+            gal%mat=0
+            CALL gal_assemble_mat(gal)
+         ELSE
+            WRITE(*,*)"Calculating Galerkin matrix solution"
+            CALL zpbtrs('L',gal%ndim,gal%kl,gal%nsol,gal%mat,gal%ldab,
+     $           gal%sol,gal%ndim,info)
+         ENDIF
+      ENDIF
+c-----------------------------------------------------------------------
+c     LU.
+c-----------------------------------------------------------------------
       IF (solver == "LU") THEN
          WRITE(*,*)"Performing Galerkin matrix LU factorization"
          CALL zgbtrf(gal%ndim,gal%ndim,gal%kl,gal%ku,gal%mat,gal%ldab,
      $        gal%ipiv,info)
+         IF (info /= 0) THEN
+            WRITE(message,'(a,i0,a)')"zgbtrf info = ",info,
+     $           ": Galerkin matrix is singular."
+            CALL program_stop(TRIM(message))
+         ENDIF
          WRITE(*,*)"Calculating Galerkin matrix solution"
          CALL zgbtrs("N",gal%ndim,gal%kl,gal%ku,gal%nsol,gal%mat,
      $        gal%ldab,gal%ipiv,gal%sol,gal%ndim,info )
-      ELSEIF (solver == "cholesky") THEN
-         WRITE(*,*)"Performing Galerkin matrix Cholesky factorization"
-         CALL zpbtrf('L',gal%ndim,gal%kl,gal%mat,gal%ldab,info)
-         WRITE(*,*)"Calculating Galerkin matrix solution"
-         CALL zpbtrs('L',gal%ndim,gal%kl,gal%nsol,gal%mat,gal%ldab,
-     $        gal%sol,gal%ndim,info)
       ENDIF
 c-----------------------------------------------------------------------
 c     compute and write delta from small resonant coefficients.
