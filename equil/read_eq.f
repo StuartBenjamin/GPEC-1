@@ -814,14 +814,20 @@ c     unformatted records, real*8, axis first, theta index fastest:
 c       mx,my (integer*4: number of surfaces, number of angles)
 c       psi(mx) [Wb/rad], f(mx) = R*B_t [T m], p(mx) [Pa], q(mx)
 c       r(my,mx), z(my,mx) [m], periodic point duplicated
-c       optional: f*df/dpsi(mx), dp/dpsi(mx) (see profile_source)
+c       optional, each only if present, in this order:
+c       f*df/dpsi(mx), dp/dpsi(mx) (used if profile_source =
+c       "integrate");
+c       psi_axis, psi_lcfs (2 reals): psi is normalized to these; the
+c       last surface may lie inside the lcfs and then caps psihigh.
+c       Optional records are told apart by length (mx, 2).
 c-----------------------------------------------------------------------
 c-----------------------------------------------------------------------
 c     declarations.
 c-----------------------------------------------------------------------
       SUBROUTINE read_eq_ldp_i
 
-      INTEGER :: mx,my,ios1,ios2
+      INTEGER :: mx,my,irec,ios1,ios2,ios3
+      REAL(r8), DIMENSION(2) :: psib
       REAL(r8), DIMENSION(:), POINTER :: psi,f,p,q,ffp,pp
       REAL(r8), DIMENSION(:,:), POINTER :: r,z
 c-----------------------------------------------------------------------
@@ -839,6 +845,10 @@ c-----------------------------------------------------------------------
      $     r(0:my,0:mx),z(0:my,0:mx),ffp(0:mx),pp(0:mx))
 c-----------------------------------------------------------------------
 c     read binary data; f*df/dpsi and dp/dpsi records are optional.
+c     The psi bounds record follows z, ffp or pp. Reading it into a
+c     profile array fails (short record); the file position is then
+c     processor dependent, so rewind and skip the 7 fixed records and
+c     any ffp, pp records before reading it.
 c-----------------------------------------------------------------------
       READ(in_unit)psi
       READ(in_unit)f
@@ -847,19 +857,49 @@ c-----------------------------------------------------------------------
       READ(in_unit)r
       READ(in_unit)z
       READ(in_unit,IOSTAT=ios1)ffp
-      READ(in_unit,IOSTAT=ios2)pp
+      ios2=ios1
+      IF(ios1 == 0)READ(in_unit,IOSTAT=ios2)pp
+      ios3=ios2
+      IF(ios2 == 0)READ(in_unit,IOSTAT=ios3)psib
+      IF(ios2 > 0)THEN
+         REWIND(in_unit)
+         DO irec=1,7+COUNT((/ios1,ios2/) == 0)
+            READ(in_unit)
+         ENDDO
+         READ(in_unit,IOSTAT=ios3)psib
+      ENDIF
       CALL bin_close(in_unit)
 c-----------------------------------------------------------------------
 c     copy and revise 1D arrays.
 c-----------------------------------------------------------------------
-      psio=psi(mx)-psi(0)
       CALL spline_alloc(sq_in,mx,4)
-      sq_in%xs=(psi-psi(0))/psio
+      IF(ios3 == 0)THEN
+         psio=psib(2)-psib(1)
+         sq_in%xs=(psi-psib(1))/psio
+         IF(.NOT.(MINVAL(sq_in%xs) >= 0 .AND. sq_in%xs(mx) <= 1))THEN
+            WRITE(*,'(1x,a,1p,4es14.6)')"psi_axis, psi_lcfs, psi(0), "
+     $           //"psi(mx) =",psib,psi(0),psi(mx)
+            CALL program_stop("ldp_i psi bounds disagree with psi")
+         ENDIF
+         IF(verbose)WRITE(*,'(1x,a,1p,2es14.6)')
+     $        "ldp_i psi bounds: psi_axis, psi_lcfs =",psib
+         IF(psihigh > sq_in%xs(mx))THEN
+            WRITE(*,'(1x,2(a,es12.5))')"Note: psihigh =",psihigh,
+     $           " clamped to the last i-file surface",sq_in%xs(mx)
+            psihigh=sq_in%xs(mx)
+         ENDIF
+      ELSE
+         psio=psi(mx)-psi(0)
+         sq_in%xs=(psi-psi(0))/psio
+      ENDIF
       sq_in%fs(:,1)=ABS(f)
       sq_in%fs(:,2)=p*mu0
       sq_in%fs(:,3)=q
-      IF(ios1 == 0 .AND. ios2 == 0)
-     $     CALL read_eq_profiles_from_derivatives(ffp*psio,pp*mu0*psio)
+      IF(ios1 == 0 .AND. ios2 == 0)THEN
+         CALL read_eq_profiles_from_derivatives(ffp*psio,pp*mu0*psio)
+      ELSEIF(TRIM(profile_source) /= "values")THEN
+         CALL read_eq_profiles_warn("no ffp, pp records in the file")
+      ENDIF
       if(psio.lt.0)psio=-psio
 c-----------------------------------------------------------------------
 c     copy and revise 2D arrays.
@@ -1502,8 +1542,7 @@ c     read supplied f, p derivatives and eqfun if present; fit sq.
 c-----------------------------------------------------------------------
       READ(dump_unit,IOSTAT=ios)slopes,sq%fs1(:,1:2)
       IF(ios == 0)sq_in_slopes(1:2)=slopes
-      CALL spline_fit_hermite(sq,"extrap",
-     $     (/sq_in_slopes(1:2),.FALSE.,.FALSE./))
+      CALL spline_fit_hermite(sq,"extrap",sq_in_slopes)
       IF(eqfun%allocated)CALL bicube_dealloc(eqfun)
       CALL bicube_alloc(eqfun,mpsi,mtheta,3)
       READ(dump_unit,IOSTAT=ios)eqfun%fs
@@ -1546,8 +1585,7 @@ c-----------------------------------------------------------------------
             sq%fs(ipsi,4)=sq%fs(ipsi,4)*ffac
             rzphi%fs(ipsi,:,3)=rzphi%fs(ipsi,:,3)*ffac
          ENDDO
-         CALL spline_fit_hermite(sq,"extrap",
-     $        (/sq_in_slopes(1:2),.FALSE.,.FALSE./))
+         CALL spline_fit_hermite(sq,"extrap",sq_in_slopes)
       ENDIF
       qa=sq%fs(mpsi,4)+sq%fs1(mpsi,4)*(one-sq%xs(mpsi))
 c-----------------------------------------------------------------------
@@ -2419,13 +2457,11 @@ c-----------------------------------------------------------------------
       END SUBROUTINE read_eq_marklin_inverse
 c-----------------------------------------------------------------------
 c     subprogram 32. read_eq_profiles_from_derivatives.
-c     profile_source = "integrate": builds the f and mu0 p columns of
-c     sq_in from ffp = f*df/dpsifac and pp = d(mu0 p)/dpsifac. Values
-c     are integrated inward from the boundary values of f**2/2 and
-c     mu0 p; knot derivatives ffp/f and pp are kept by
-c     spline_fit_hermite. Tabulated values are not paired with the
-c     tabulated derivatives: their rounding noise would set f''.
-c     "values": tabulated values only. Falls back to "values" if the
+c     profile_source = "integrate": replaces the f and mu0 p columns
+c     of sq_in by integrals of ffp = f*df/dpsifac and
+c     pp = d(mu0 p)/dpsifac inward from the boundary values, and sets
+c     ffp/f and pp as knot derivatives for spline_fit_hermite. Leaves
+c     sq_in unchanged for "values", or, with a warning, if the
 c     derivatives are unusable.
 c-----------------------------------------------------------------------
 c-----------------------------------------------------------------------
@@ -2454,7 +2490,8 @@ c-----------------------------------------------------------------------
       f=sq_in%fs(:,1)
       p=sq_in%fs(:,2)
 c-----------------------------------------------------------------------
-c     check derivatives are finite and agree in sign with the values.
+c     check derivatives are finite and that f and p agree on their sign
+c     relative to the values (that common sign is applied below).
 c-----------------------------------------------------------------------
       IF(.NOT.(ALL(ABS(ffp) <= HUGE(one)) .AND.
      $     ALL(ABS(pp) <= HUGE(one)) .AND. ALL(f /= 0)))THEN

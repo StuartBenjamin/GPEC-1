@@ -99,8 +99,7 @@ c-----------------------------------------------------------------------
          sq_out%fs(:,4)=SQRT(sq_out%xs)
          sq_out%fs1(:,1)=sq%fs1(:,1)/twopi
          sq_out%fs1(:,2)=sq%fs1(:,2)
-         CALL spline_fit_hermite(sq_out,"extrap",
-     $        (/sq_in_slopes(1:2),.FALSE.,.FALSE./))
+         CALL spline_fit_hermite(sq_out,"extrap",sq_in_slopes)
          sq_out%name="  sq  "
          sq_out%title=(/"psifac","  f   ","mu0 p ","  q   "," rho  "/)
          IF(bin_eq_1d)CALL bin_open(bin_2d_unit,"sq_out.bin","UNKNOWN",
@@ -848,7 +847,7 @@ c-----------------------------------------------------------------------
       WRITE(dump_unit)rzphi%name
       WRITE(dump_unit)rzphi%periodic
 c-----------------------------------------------------------------------
-c     write supplied f, p derivatives and eqfun (read only if present).
+c     write f, p knot derivatives and eqfun; optional for read_eq_dump.
 c-----------------------------------------------------------------------
       WRITE(dump_unit)sq_in_slopes(1:2),sq%fs1(:,1:2)
       IF(eqfun%allocated)WRITE(dump_unit)eqfun%fs
