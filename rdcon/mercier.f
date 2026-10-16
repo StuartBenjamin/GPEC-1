@@ -226,8 +226,9 @@ c-----------------------------------------------------------------------
 c     evaluate geometric prefactor of Wc from
 c     Schlutt and Hegna 2012 https://doi.org/10.1063/1.4747500
 c-----------------------------------------------------------------------
-            Wc_prefac=(v1*avg(5)/(q*psio))*! overbar{J B^2}           [in psi_tor]
-     $      v1*avg(7)*(q*psio)*            ! overbar{J |nabla psi|^2} [in psi_tor]
+            !overbar is an angle average (S-H Eq. 15): V'<f>/(2pi)^2.
+            Wc_prefac=v1*avg(5)/(q*psio*twopi**2)*! overbar{J B^2}  [psi_tor]
+     $      v1*avg(7)*(q*psio)/twopi**2*   ! overbar{J |nabla psi|^2} [in psi_tor]
      $      (q**6/((q1/psio)**2))*         ! {d iota / d psi_tor}^(-2)[in psi_tor]
      $      (1/(q*psio))**4                ! *Conversion from psi_tor^4 to psi_pol_norm^4
             !Divide by mode num. m^2 to finish, units are (psi_pol_norm)^4
