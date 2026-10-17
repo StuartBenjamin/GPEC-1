@@ -487,7 +487,10 @@ c-----------------------------------------------------------------------
         ! edge, msing inner layers, split msing-1 inter-regions, edge
         nIntervalsMin = 1 + msing + 2 * (msing -1) + 1
          IF(nIntervalsMin > nIntervalsTot)THEN
-             nIntervalsTot = nIntervalsMin
+             ! plus a spare per outer region (axis, gaps, edge): at
+             ! the bare minimum the axis interval is never split and
+             ! the innermost Delta' can be wrong by orders of magnitude
+             nIntervalsTot = nIntervalsMin + msing + 1
              WRITE(*, '(1x,a25,i4, a27)') "Forcing nIntervalsTot to ",
      $          nIntervalsTot," to cover all singularities"
          ENDIF
