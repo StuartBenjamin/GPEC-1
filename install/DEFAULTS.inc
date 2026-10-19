@@ -463,7 +463,11 @@ endif
 # The ACML library is not being maintained anymore but we can leave it there for now
 
 # use acml or lapack based on what is loaded
-ifdef MKLROOT
+# LIBSCIHOME (opt-in, e.g. $CRAY_LIBSCI_PREFIX_DIR on Cray systems): serial Cray LibSci, found at run time via rpath
+ifdef LIBSCIHOME
+    MATHHOME = $(LIBSCIHOME)
+    MATHLIBS = -lsci_gnu -Wl,-rpath,$(LIBSCIHOME)/lib
+else ifdef MKLROOT
     MATHHOME = $(MKLROOT)
   	MATHLIBS = -lmkl_rt
 else ifdef OPENBLASHOME
@@ -476,7 +480,7 @@ else ifdef ACML_HOME
     MATHHOME = $(ACML_HOME)
     MATHLIBS = -lacml
 else
-    $(info "Math libraries require MKLROOT, LAPACKHOME, OPENBLASHOME, or ACML_HOME")
+    $(info "Math libraries require LIBSCIHOME, MKLROOT, LAPACKHOME, OPENBLASHOME, or ACML_HOME")
     $(info "Automatically using OpenBLAS")
     NEEDED_DEPS += OpenBLAS
     MATHHOME = $(realpath ../deps)
