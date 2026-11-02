@@ -268,6 +268,7 @@ c-----------------------------------------------------------------------
             mreterms%fs(ipsi,15)=avg(13) !Avg 1/major radius
             mreterms%fs(ipsi,16)=avg(20) !overbar{R^2}     (Hegna 1999)
             mreterms%fs(ipsi,17)=avg(21) !avg{R^2} ~ [m^2] (Hegna 1999)
+            mreterms%fs(ipsi,31)=eps_loc ! inverse aspect ratio a/R
             ! will only print out the following if geom_flag is true:
             mreterms%fs(ipsi,18)=avg(1) ! <bsq/dpsisq>
             mreterms%fs(ipsi,19)=avg(2) ! <1/dpsisq>

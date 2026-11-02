@@ -67,7 +67,8 @@ c-----------------------------------------------------------------------
       INTEGER :: hbs_id, ta_id, tr_id, ftr_id, muf_id, dnc_id,
      $    wc_id, jp_id, b_id, bt_id, bpo_id, mir_id, mar_id, mair_id,
      $    obr_id, ars_id, a1_id, a2_id, a3_id, a4_id, a5_id, a6_id,
-     $    a7_id, a14_id, a15_id, a16_id, a17_id, a18_id, a19_id, npsi_id
+     $    a7_id, a14_id, a15_id, a16_id, a17_id, a18_id, a19_id,
+     $    npsi_id, eps_id
       REAL(r4) :: cpusec, wallsec
       CHARACTER(2) :: sn
       CHARACTER(64) :: ncfile
@@ -268,6 +269,8 @@ c-----------------------------------------------------------------------
      $     "overbar_Rsq", nf90_double, p_dim, obr_id))
          CALL check( nf90_def_var(ncid,
      $     "avg_Rsq", nf90_double, p_dim, ars_id))
+         CALL check( nf90_def_var(ncid,
+     $     "eps_loc", nf90_double, p_dim, eps_id))
          IF(geom_flag)THEN
             CALL check( nf90_def_var(ncid,
      $     "avg_1", nf90_double, p_dim, a1_id))
@@ -436,6 +439,7 @@ c-----------------------------------------------------------------------
          CALL check( nf90_put_var(ncid,mair_id, mreterms%fs(:,15)))
          CALL check( nf90_put_var(ncid,obr_id, mreterms%fs(:,16)))
          CALL check( nf90_put_var(ncid,ars_id, mreterms%fs(:,17)))
+         CALL check( nf90_put_var(ncid,eps_id, mreterms%fs(:,31)))
          IF(geom_flag)THEN
             CALL check( nf90_put_var(ncid,a1_id, mreterms%fs(:,18)))
             CALL check( nf90_put_var(ncid,a2_id, mreterms%fs(:,19)))
