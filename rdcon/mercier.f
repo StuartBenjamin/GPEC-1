@@ -42,7 +42,7 @@ c-----------------------------------------------------------------------
 c     prepare spline types.
 c-----------------------------------------------------------------------
       IF(MRE_flag)THEN
-         CALL spline_alloc(ff,mtheta,22)
+         CALL spline_alloc(ff,mtheta,23)
          CALL spline_alloc(Zeff_spline,SIZE(psi_N_Zeff_)-1,1)
          Zeff_spline%xs=psi_N_Zeff_
          Zeff_spline%fs(:,1)=Zeff_
@@ -141,6 +141,8 @@ c-----------------------------------------------------------------------
                ff%fs(itheta,20)=r**2*v1/jac !overbar{R^2}     (Hegna 1999)
                ff%fs(itheta,21)=r**2        !avg{R^2} ~ [m^2] (Hegna 1999)
                ff%fs(itheta,22)=SQRT(dpsisq)
+               CALL bicube_eval(eqfun,rzphi%xs(ipsi),theta,1)
+               ff%fs(itheta,23)=(chi1*eqfun%fy(1)/jac)**2/bsq
             ENDIF
             ff%fs(itheta,:)=ff%fs(itheta,:)*jac/v1
          ENDDO
@@ -282,6 +284,7 @@ c-----------------------------------------------------------------------
             mreterms%fs(ipsi,28)=avg(17)! <1/(R^2 B)>
             mreterms%fs(ipsi,29)=avg(18)! <1/B>
             mreterms%fs(ipsi,30)=avg(19)! <sqrt(dpsisq)/R>
+            mreterms%fs(ipsi,31)=avg(23)! <(b.grad|B|)^2> [T^2/m^2]
          ENDIF
 120      FORMAT(19(E30.15,1X))
       ENDDO
