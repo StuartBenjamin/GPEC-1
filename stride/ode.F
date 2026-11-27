@@ -22,7 +22,7 @@ c     13. ode_etime.
 c     14. ode_zero_crossings.
 c     15. ode_focal_step.
 c     16. ode_nneg.
-c     17. ode_crit.
+c     17. ode_revals.
 c-----------------------------------------------------------------------
 c     subprogram 0. ode_mod.
 c     module declarations.
@@ -429,7 +429,9 @@ c-----------------------------------------------------------------------
                   rwork(11)=rwork(5)
                   CALL SYSTEM_CLOCK(COUNT=sTime)
                   uHatSave = identityMat(:,mpert+1:2*mpert)
-                  nnegSave = 0
+                  !X = 0: its eigenvalues leave 0 in the integration
+                  !direction, not a crossing
+                  nnegSave = MERGE(0,mpert,psiDirs(iInterval) == 1)
                   DO WHILE(psiDirs(iInterval)*startPsi
      $                 < psiDirs(iInterval)*endPsi)
                      rtol(1) = tol_nr
@@ -1664,9 +1666,15 @@ c-----------------------------------------------------------------------
 c     subprogram 15. ode_focal_step.
 c     one ODE step of a solution uHat (uHatSave and nnegSave: the
 c     previous step). A zero crossing moves an eigenvalue of X U^-1
-c     through 0 (upward in psi, F > 0): the number of its negative
-c     eigenvalues (ode_nneg) changes and crit changes sign. Adds the
-c     crossings to nfoc.
+c     up through 0 (F > 0); a passage through +-inf (det U = 0) also
+c     changes the number of its negative eigenvalues (ode_nneg). Where
+c     that number changes, the eigenvalues e of both steps, placed on
+c     the circle at 2 atan(e) (0 and +-inf opposite), are matched by
+c     the cyclic shift that moves them least: a matched pair whose
+c     shorter arc passes through 0 is a crossing (downward: -1), one
+c     through pi a passage. Unlike the sign of the smallest-|e|
+c     eigenvalue, this does not miss a crossing while another
+c     eigenvalue stays nearer 0. Adds the crossings to nfoc.
 c-----------------------------------------------------------------------
 c-----------------------------------------------------------------------
 c     declarations.
@@ -1678,17 +1686,35 @@ c-----------------------------------------------------------------------
          INTEGER, INTENT(INOUT) :: nnegSave,nfoc
          INTEGER, INTENT(IN) :: dir
 
-         INTEGER :: nneg
-         REAL(r8) :: crit,critSave
+         INTEGER :: nneg,i,k,kBest
+         REAL(r8) :: cost,costBest,e0,e1
+         REAL(r8), DIMENSION(mpert) :: a,aSave,d
 c-----------------------------------------------------------------------
-c     count a crossing only where crit changes sign too.
+c     match the two steps' eigenvalues and count the arcs through 0.
 c-----------------------------------------------------------------------
          nneg = ode_nneg(uHat)
          IF (nneg /= nnegSave) THEN
-            CALL ode_crit(uHatSave,critSave)
-            CALL ode_crit(uHat,crit)
-            IF (crit*critSave < 0)
-     $           nfoc = nfoc+MAX(0,dir*(nnegSave-nneg))
+            CALL ode_revals(uHatSave,aSave)
+            CALL ode_revals(uHat,a)
+            aSave = 2*ATAN(aSave)
+            a = 2*ATAN(a)
+            costBest = HUGE(costBest)
+            DO k = -ABS(nneg-nnegSave)-1,ABS(nneg-nnegSave)+1
+               d = ABS(a-CSHIFT(aSave,-k))
+               cost = SUM(MIN(d,twopi-d))
+               IF (cost < costBest) THEN
+                  costBest = cost
+                  kBest = k
+               ENDIF
+            ENDDO
+            DO i = 1,mpert
+               e0 = aSave(MODULO(i-kBest-1,mpert)+1)
+               e1 = a(i)
+               IF (e0 < 0 .AND. e1 >= 0 .AND. e1-e0 < pi)
+     $              nfoc = nfoc+dir
+               IF (e0 >= 0 .AND. e1 < 0 .AND. e0-e1 < pi)
+     $              nfoc = nfoc-dir
+            ENDDO
          ENDIF
          uHatSave = uHat
          nnegSave = nneg
@@ -1734,20 +1760,19 @@ c     terminate.
 c-----------------------------------------------------------------------
       END FUNCTION ode_nneg
 c-----------------------------------------------------------------------
-c     subprogram 17. ode_crit.
-c     the smallest-magnitude eigenvalue of the inverse plasma response
-c     matrix X U^-1 (the sign of RDCON's crit, ode_output_get_crit).
+c     subprogram 17. ode_revals.
+c     the eigenvalues, ascending, of the inverse plasma response matrix
+c     X U^-1 (RDCON's crit is the one of smallest magnitude).
 c-----------------------------------------------------------------------
 c-----------------------------------------------------------------------
 c     declarations.
 c-----------------------------------------------------------------------
-      SUBROUTINE ode_crit(y,crit)
+      SUBROUTINE ode_revals(y,evals)
          COMPLEX(r8), DIMENSION(2*mpert,mpert), INTENT(IN) :: y
-         REAL(r8), INTENT(OUT) :: crit
+         REAL(r8), DIMENSION(mpert), INTENT(OUT) :: evals
 
-         INTEGER :: info,imin(1)
+         INTEGER :: info
          INTEGER, DIMENSION(mpert) :: ipiv
-         REAL(r8), DIMENSION(mpert) :: evals
          REAL(r8), DIMENSION(3*mpert-2) :: rwork
          COMPLEX(r8), DIMENSION(2*mpert-1) :: work
          COMPLEX(r8), DIMENSION(mpert,mpert) :: wp,temp
@@ -1761,11 +1786,9 @@ c-----------------------------------------------------------------------
          wp = (wp+CONJG(TRANSPOSE(wp)))/2
          CALL zheev('N','U',mpert,wp,mpert,evals,work,2*mpert-1,rwork,
      $        info)
-         imin = MINLOC(ABS(evals))
-         crit = evals(imin(1))
 c-----------------------------------------------------------------------
 c     terminate.
 c-----------------------------------------------------------------------
       RETURN
-      END SUBROUTINE ode_crit
+      END SUBROUTINE ode_revals
       END MODULE stride_ode_mod
